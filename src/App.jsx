@@ -72,6 +72,15 @@ function App() {
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          stepSize: 1,
+          precision: 0, // This ensures whole numbers only
+        },
+      },
+    },
     plugins: {
       legend: {
         position: "top",
