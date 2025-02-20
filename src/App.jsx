@@ -1,13 +1,19 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Bar } from "react-chartjs-2"
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js"
 import { getAccessToken } from "./auth"
 import { getPlaylistTracks, getTrackGenres } from "./SpotifyApi"
 import { Music, Loader2 } from "lucide-react"
+import "./App.css"
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
+
+const extractPlaylistId = (url) => {
+  const match = url.match(/playlist\/([a-zA-Z0-9]+)/)
+  return match ? match[1] : null
+}
 
 function App() {
   const [playlistId, setPlaylistId] = useState("")
@@ -19,18 +25,36 @@ function App() {
     getAccessToken()
   }, [])
 
-  const analyzePlaylist = async () => {
+  const analyzePlaylist = useCallback(async (id) => {
+    if (!id) return
     setIsLoading(true)
     setError(null)
     try {
-      const tracks = await getPlaylistTracks(playlistId)
+      const tracks = await getPlaylistTracks(id)
       const genres = await getTrackGenres(tracks)
       setGenreData(genres)
     } catch (err) {
       setError("Error analyzing playlist. Please check the playlist ID and try again.")
     }
     setIsLoading(false)
-  }
+  }, [])
+
+  const handlePaste = useCallback(
+    (event) => {
+      const pastedText = event.clipboardData.getData("text")
+      const extractedId = extractPlaylistId(pastedText)
+      if (extractedId) {
+        setPlaylistId(extractedId)
+        analyzePlaylist(extractedId)
+      }
+    },
+    [analyzePlaylist],
+  )
+
+  useEffect(() => {
+    document.addEventListener("paste", handlePaste)
+    return () => document.removeEventListener("paste", handlePaste)
+  }, [handlePaste])
 
   const chartData = {
     labels: Object.keys(genreData),
@@ -47,6 +71,7 @@ function App() {
 
   const chartOptions = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
         position: "top",
@@ -63,63 +88,44 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-12">
-          <Music className="mx-auto h-12 w-12 text-green-500" />
-          <h1 className="mt-3 text-4xl font-extrabold text-gray-900 sm:text-5xl">Spotify Genre Analyzer</h1>
-          <p className="mt-3 text-xl text-gray-500">Discover the genre distribution of your favorite playlists</p>
+    <div className="app-container">
+      <div className="main-content">
+        <Music className="music-icon" />
+        <h1>Spotify Genre Analyzer</h1>
+        <p className="subtitle">Discover the genre distribution of your favorite playlists.</p>
+
+        <div className="input-group">
+          <input
+            id="playlist-id"
+            type="text"
+            value={playlistId}
+            onChange={(e) => setPlaylistId(e.target.value)}
+            onPaste={handlePaste}
+            placeholder="Paste Spotify Playlist Link"
+          />
+          <button onClick={() => analyzePlaylist(playlistId)} disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="loader-icon" />
+                Analyzing...
+              </>
+            ) : (
+              "Analyze"
+            )}
+          </button>
         </div>
-        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-            <div className="space-y-6">
-              <div>
-                <label htmlFor="playlist-id" className="block text-sm font-medium text-gray-700">
-                  Playlist ID
-                </label>
-                <div className="mt-1">
-                  <input
-                    id="playlist-id"
-                    type="text"
-                    value={playlistId}
-                    onChange={(e) => setPlaylistId(e.target.value)}
-                    placeholder="Enter Spotify Playlist ID"
-                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                  />
-                </div>
-              </div>
-              <div>
-                <button
-                  onClick={analyzePlaylist}
-                  disabled={isLoading}
-                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    "Analyze Playlist"
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        {error && (
-          <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-            <p className="text-red-600 text-center">{error}</p>
-          </div>
-        )}
-        {Object.keys(genreData).length > 0 && (
-          <div className="mt-12 bg-white shadow sm:rounded-lg p-6">
-            <div className="chart-container">
-              <Bar data={chartData} options={chartOptions} />
-            </div>
-          </div>
-        )}
+
+        {error && <p className="error-message">{error}</p>}
       </div>
+
+      {Object.keys(genreData).length > 0 && (
+        <div className="chart-container">
+          <h2>Genre Distribution</h2>
+          <div className="chart">
+            <Bar data={chartData} options={chartOptions} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
